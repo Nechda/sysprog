@@ -2,6 +2,8 @@
 #include "StrLib.h"
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define MERGE_SORT 1
 #define HEAP_SORT 2
@@ -218,6 +220,7 @@ struct Array sortArrayFromFile(const char* filename)
     struct Array result;
     result.size = 0;
     result.data = NULL;
+    
     if(!filename)
     {
         printf("Error: filename string contain null ptr.\n");

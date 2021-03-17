@@ -132,7 +132,7 @@ static void allocateMemoryForCoroutine(int nCount)
     myContexts = (ucontext_t*)calloc(nContexts,sizeof(ucontext_t));
     sortedArrays = (struct Array*)calloc(nContexts,sizeof(struct Array));
     contextTimeInfo = (struct SchedulerInfo*)calloc(nContexts, sizeof(struct SchedulerInfo));
-    signal_stack = malloc(4 KB);
+    signal_stack = allocate_stack_sig();
 }
 
 /**
@@ -142,20 +142,28 @@ static void allocateMemoryForCoroutine(int nCount)
 */
 static void cleanMemoryForCoroutine(int nCount)
 {
+    if(myContexts)
+    for(int i = 0; i < nCount; i++)
+    {
+        if(myContexts[i].uc_stack.ss_sp) free(myContexts[i].uc_stack.ss_sp);
+        myContexts[i].uc_stack.ss_sp = NULL;
+    }
     if(myContexts) free(myContexts);
+    
+    if(sortedArrays)
+    for(int i = 0; i < nCount; i++)
+    {
+        if(sortedArrays[i].data) free(sortedArrays[i].data);
+        sortedArrays[i].data = NULL;
+    }
     if(sortedArrays) free(sortedArrays);
+    
     if(contextTimeInfo) free(contextTimeInfo);
     if(signal_stack) free(signal_stack);
     myContexts = NULL;
     sortedArrays = NULL;
     contextTimeInfo = NULL;
     signal_stack = NULL;
-
-    for(int i = 0; i < nCount; i++)
-    {
-        if(myContexts[i].uc_stack.ss_sp) free(myContexts[i].uc_stack.ss_sp);
-        myContexts[i].uc_stack.ss_sp = NULL;
-    }
 }
 
 //==================================================================================================
@@ -214,7 +222,7 @@ void timer_interrupt(int j, siginfo_t *si, void *old_context)
 
     getcontext(&signal_context);
     signal_context.uc_stack.ss_sp = signal_stack;
-    signal_context.uc_stack.ss_size = 4 KB;
+    signal_context.uc_stack.ss_size = STACK_SIZE;
     signal_context.uc_stack.ss_flags = 0;
     sigemptyset(&signal_context.uc_sigmask);
     makecontext(&signal_context, scheduler, 1);
@@ -298,7 +306,7 @@ static void writeArraysInFile(const char* filename)
             fprintf(outFile, "%d ", min);
     }
 
-    close(outFile);
+    fclose(outFile);
 }
 
 int main(int argc, char *argv[])
@@ -342,7 +350,7 @@ int main(int argc, char *argv[])
     //выводим инфу о том, сколько работали корутины
     for(int i = 0; i<nContexts; i++)
     {
-        printf("cour[%d]: swap_times: %04d, total working time %05d us\n",
+        printf("cour[%d]: swap_times: %04ld, total working time %05ld us\n",
             i, contextTimeInfo[i].swapTimes,
             contextTimeInfo[i].totalWakingTime
         );
@@ -356,7 +364,7 @@ int main(int argc, char *argv[])
     clock_t end = clock();
     clock_t uSeconds = end-start;
     double seconds = (double)uSeconds/CLOCKS_PER_SEC;
-    printf("Writing to the file took %04d us (%04lf s)\n", uSeconds, seconds);
+    printf("Writing to the file took %04ld us (%04lf s)\n", uSeconds, seconds);
     
 
     //и чистим память
