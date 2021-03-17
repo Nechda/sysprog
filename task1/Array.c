@@ -27,7 +27,7 @@ static int* readArrayFromFile(const char* filename, int* retunredArraySize)
     }
     int* array = NULL;
     char* rawData = NULL;
-    int size = readFullFile(filename, &rawData);
+    int size = async_readFullFile(filename, &rawData);
     if (size == STANDART_ERROR_CODE)
     {
         printf("Error: cant read file!\n");
