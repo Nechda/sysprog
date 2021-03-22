@@ -91,13 +91,13 @@ static void doSorting(int id, const char* filename)
 */
 static void* allocate_stack_sig()
 {
-	void *stack = malloc(STACK_SIZE);
-	stack_t ss;
-	ss.ss_sp = stack;
-	ss.ss_size = STACK_SIZE;
-	ss.ss_flags = 0;
-	sigaltstack(&ss, NULL);
-	return stack;
+    void *stack = malloc(STACK_SIZE);
+    stack_t ss;
+    ss.ss_sp = stack;
+    ss.ss_size = STACK_SIZE;
+    ss.ss_flags = 0;
+    sigaltstack(&ss, NULL);
+    return stack;
 }
 
 
@@ -110,12 +110,12 @@ static void* allocate_stack_sig()
 static void createCoroutine(int id, const char* filename)
 {
     if (getcontext(&myContexts[id]) == -1)
-		handle_error_rude("getcontext");
-	myContexts[id].uc_stack.ss_sp = allocate_stack_sig();
-	myContexts[id].uc_stack.ss_size = STACK_SIZE;
+        handle_error_rude("getcontext");
+    myContexts[id].uc_stack.ss_sp = allocate_stack_sig();
+    myContexts[id].uc_stack.ss_size = STACK_SIZE;
     myContexts[id].uc_stack.ss_flags = 0;
-	myContexts[id].uc_link = &uctx_main;
-	makecontext(&myContexts[id], doSorting, 2, id, filename);
+    myContexts[id].uc_link = &uctx_main;
+    makecontext(&myContexts[id], doSorting, 2, id, filename);
 }
 
 /**
@@ -208,7 +208,7 @@ void scheduler()
 
 static void timer_off()
 {
-	timer.it_interval.tv_sec = 0;
+    timer.it_interval.tv_sec = 0;
         timer.it_interval.tv_usec = 0;
         timer.it_value = timer.it_interval;
         if (setitimer(ITIMER_REAL, &timer, NULL) ) perror("setitiimer");
@@ -281,55 +281,55 @@ static void writeArraysInFile(const char* filename)
         index[i] = 0;
 
     short nArraysWritedAlready = 0;
-	for(int i = 0; i < nContexts; i++)
-		if(sortedArrays[i].size == 0)
-		{
-			sortedArrays[i].isSorted = 0;
-			nArraysWritedAlready++;
-		}
-		
-		
+    for(int i = 0; i < nContexts; i++)
+        if(sortedArrays[i].size == 0)
+        {
+            sortedArrays[i].isSorted = 0;
+            nArraysWritedAlready++;
+        }
+        
+        
     while(nArraysWritedAlready != nContexts)
     {
         int min = INT_MAX;
         int tmp = 0;
         //поиск минимального элемента
         for(int i = 0; i < nContexts; i++)
-		{
-			if(!sortedArrays[i].isSorted)
-				continue;
-			if(index[i] >= sortedArrays[i].size)
-			{
-				sortedArrays[i].isSorted = 0;
-				nArraysWritedAlready++;
-		    }
-			tmp = sortedArrays[i].data[index[i]];
+        {
+            if(!sortedArrays[i].isSorted)
+                continue;
+            if(index[i] >= sortedArrays[i].size)
+            {
+                sortedArrays[i].isSorted = 0;
+                nArraysWritedAlready++;
+            }
+            tmp = sortedArrays[i].data[index[i]];
             if(min > tmp)
                 min = tmp;
-		}
-		
-		if(nArraysWritedAlready == nContexts)
-			break;
-		
+        }
+        
+        if(nArraysWritedAlready == nContexts)
+            break;
+        
         
         //затем продвижение указателей в массивах до тех пор, пока не встретим новое число
         tmp = 0; //будет хранить количество чисел во всех массивах, которые равны min
         for(int i = 0; i < nContexts; i++)
             if(sortedArrays[i].isSorted)
             {
-            	if(min != sortedArrays[i].data[index[i]])
-            	    continue;
+                if(min != sortedArrays[i].data[index[i]])
+                    continue;
                 while(min == sortedArrays[i].data[index[i]])
                 {
                     index[i]++;
                     tmp++;
-					if(index[i] == sortedArrays[i].size)
-					{
-						sortedArrays[i].isSorted = 0;
-						nArraysWritedAlready++;
-						break;
-					}
-		        }
+                    if(index[i] == sortedArrays[i].size)
+                    {
+                        sortedArrays[i].isSorted = 0;
+                        nArraysWritedAlready++;
+                        break;
+                    }
+                }
             }
         
         //ну и печатаем в файл
@@ -401,5 +401,5 @@ int main(int argc, char *argv[])
     
     //и чистим память
     cleanMemoryForCoroutine(nContexts);
-	return 0;
+    return 0;
 }
