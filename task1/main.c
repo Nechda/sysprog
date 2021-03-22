@@ -205,6 +205,15 @@ void scheduler()
     setcontext(&myContexts[currentContextIndex]);
 }
 
+
+static void timer_off()
+{
+	timer.it_interval.tv_sec = 0;
+        timer.it_interval.tv_usec = 0;
+        timer.it_value = timer.it_interval;
+        if (setitimer(ITIMER_REAL, &timer, NULL) ) perror("setitiimer");
+}
+
 /**
     \brief  Обработчик таймера, вызывающий планировщик.
     \note   Если все массивы отсортированы, то таймер выключается.
@@ -213,10 +222,7 @@ void timer_interrupt(int j, siginfo_t *si, void *old_context)
 {
     if(isAllArraySorted())
     {
-        timer.it_interval.tv_sec = 0;
-        timer.it_interval.tv_usec = 0;
-        timer.it_value = timer.it_interval;
-        if (setitimer(ITIMER_REAL, &timer, NULL) ) perror("setitiimer");
+        timer_off();
         return;
     }
 
@@ -275,30 +281,55 @@ static void writeArraysInFile(const char* filename)
         index[i] = 0;
 
     short nArraysWritedAlready = 0;
+	for(int i = 0; i < nContexts; i++)
+		if(sortedArrays[i].size == 0)
+		{
+			sortedArrays[i].isSorted = 0;
+			nArraysWritedAlready++;
+		}
+		
+		
     while(nArraysWritedAlready != nContexts)
     {
         int min = INT_MAX;
         int tmp = 0;
         //поиск минимального элемента
         for(int i = 0; i < nContexts; i++)
-            if(sortedArrays[i].isSorted && min > (tmp = sortedArrays[i].data[index[i]]))
+		{
+			if(!sortedArrays[i].isSorted)
+				continue;
+			if(index[i] >= sortedArrays[i].size)
+			{
+				sortedArrays[i].isSorted = 0;
+				nArraysWritedAlready++;
+		    }
+			tmp = sortedArrays[i].data[index[i]];
+            if(min > tmp)
                 min = tmp;
+		}
+		
+		if(nArraysWritedAlready == nContexts)
+			break;
+		
         
         //затем продвижение указателей в массивах до тех пор, пока не встретим новое число
         tmp = 0; //будет хранить количество чисел во всех массивах, которые равны min
         for(int i = 0; i < nContexts; i++)
-            if(sortedArrays[i].isSorted && min == sortedArrays[i].data[index[i]])
+            if(sortedArrays[i].isSorted)
             {
+            	if(min != sortedArrays[i].data[index[i]])
+            	    continue;
                 while(min == sortedArrays[i].data[index[i]])
                 {
                     index[i]++;
                     tmp++;
-                }
-                if (index[i] == sortedArrays[i].size)
-                {
-                    sortedArrays[i].isSorted = 0;
-                    nArraysWritedAlready++;
-                }
+					if(index[i] == sortedArrays[i].size)
+					{
+						sortedArrays[i].isSorted = 0;
+						nArraysWritedAlready++;
+						break;
+					}
+		        }
             }
         
         //ну и печатаем в файл
@@ -346,6 +377,8 @@ int main(int argc, char *argv[])
 
     //ждем, пока все закончат сортировать
     while(!isAllArraySorted()){;;}
+    timer_off();
+    
 
     //выводим инфу о том, сколько работали корутины
     for(int i = 0; i<nContexts; i++)
@@ -366,7 +399,6 @@ int main(int argc, char *argv[])
     double seconds = (double)uSeconds/CLOCKS_PER_SEC;
     printf("Writing to the file took %04ld us (%04lf s)\n", uSeconds, seconds);
     
-
     //и чистим память
     cleanMemoryForCoroutine(nContexts);
 	return 0;
