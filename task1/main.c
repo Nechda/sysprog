@@ -7,6 +7,7 @@
 #include <time.h>
 #include <sys/types.h>
 #include <sys/time.h>
+#include <assert.h>
 
 #include "Array.h"
 #include "StrLib.h"
@@ -83,10 +84,9 @@ static bool isAllArraySorted()
 */
 static void doSorting(int id, const char* filename)
 {
-    CLOCK_DELAY;
     sortedArrays[id] = sortArrayFromFile(filename);
+    contextTimeInfo[id].totalWakingTime += CLOCK_DELAY;
     sortedArrays[id].isSorted = 1;
-    while(1){;;}
 }
 
 /**
@@ -98,6 +98,12 @@ static void doSorting(int id, const char* filename)
 static void* allocate_stack_sig()
 {
     void *stack = malloc(STACK_SIZE);
+    assert(stack);
+    if(!stack)
+    {
+        handle_error_rude("Cant allocate memory for signal stack context.");
+        return NULL;
+    }
     stack_t ss;
     ss.ss_sp = stack;
     ss.ss_size = STACK_SIZE;
@@ -124,6 +130,12 @@ static void createCoroutine(int id, const char* filename)
     makecontext(&myContexts[id], doSorting, 2, id, filename);
 }
 
+
+#define Assert_memory_allocator(ptr)\
+    assert(ptr);\
+    if(!ptr)\
+        handle_error_rude("Cant allocate memory for coroutine.");
+
 /**
     \brief  Функция выделяет память, которая использутеся
             для работы планировщика и корутин.
@@ -136,9 +148,13 @@ static void allocateMemoryForCoroutine(int nCount)
     if(!ifFirtsTime) return;
     ifFirtsTime = false;
     myContexts = (ucontext_t*)calloc(nContexts,sizeof(ucontext_t));
+    Assert_memory_allocator(myContexts);
     sortedArrays = (struct Array*)calloc(nContexts,sizeof(struct Array));
+    Assert_memory_allocator(sortedArrays);
     contextTimeInfo = (struct SchedulerInfo*)calloc(nContexts, sizeof(struct SchedulerInfo));
+    Assert_memory_allocator(contextTimeInfo);
     signal_stack = allocate_stack_sig();
+    Assert_memory_allocator(signal_stack);
 }
 
 /**
@@ -189,10 +205,7 @@ static void cleanMemoryForCoroutine(int nCount)
 
 sigset_t set; 
 struct itimerval timer;
-///< Флаг, отвечающий за то, остановлен ли планировщик
-//   Данный флаг принимает true, только когда все массивы
-//   отсортированы и планировщик передает управление main()
-bool isSchedulerStoped = false; 
+
 
 static void timer_off()
 {
@@ -211,71 +224,34 @@ static void timer_on()
 }
 
 
-
 /**
     \brief    Простейший планировщих корутин.
     \details  Планировщик вызывается по прерыванию от таймера
               каждые TIME_LEGACY микросекнуд, при этом выбирается
               та корутина, которая все еще сортирует свой массив.
+              То есть, если один файл является очень большим, то
+              в какой-то момент переключений между корутинами не будет.
+              А все время, отведенное программе, будет тратиться на
+              сортировку самого большого файла.
 */
 void scheduler()
 {
     timer_off();
-    DEBUG_OUTPUT(printf("Let's chose another one\n"));
     int oldIndex = currentContextIndex;
     do
     {
         currentContextIndex++;
         currentContextIndex %= nContexts;
-        DEBUG_OUTPUT(printf("May be it's : %d\n", currentContextIndex));
-    }
-    while( sortedArrays[currentContextIndex].isSorted
-        && currentContextIndex != oldIndex
-    );
+    }while(sortedArrays[currentContextIndex].isSorted);
 
-    DEBUG_OUTPUT(
-        for(int i = 0; i < nContexts; i++)
-            printf("isSorted[%d] = %d, Total time: %zd us\n",
-                i, sortedArrays[i].isSorted,
-                contextTimeInfo[i].totalWakingTime
-        );
-    );
-
-
-    if(currentContextIndex!=oldIndex || !sortedArrays[currentContextIndex].isSorted)
-    {
-        DEBUG_OUTPUT(
-            printf("Set context as : %d\n", currentContextIndex);
-        );
-        //contextTimeInfo[oldIndex].swapTimes++;
-    }
-    else
-    {
-        isSchedulerStoped = true;
-        DEBUG_OUTPUT(printf("Want jmp to main!\n"));
-        setcontext(&uctx_main);
-    }
-    
+    if(currentContextIndex!=oldIndex)
+        contextTimeInfo[oldIndex].swapTimes++;
     
 
     timer_on();
-    CLOCK_DELAY;
     setcontext(&myContexts[currentContextIndex]);
 }
 
-
-/**
-    \brief  Функция создает контекст для запуска планировщика
-*/
-void createSchedulerContext()
-{
-    getcontext(&signal_context);
-    signal_context.uc_stack.ss_sp = signal_stack;
-    signal_context.uc_stack.ss_size = STACK_SIZE;
-    signal_context.uc_stack.ss_flags = 0;
-    sigemptyset(&signal_context.uc_sigmask);
-    makecontext(&signal_context, scheduler, 1);
-}
 
 /**
     \brief  Обработчик таймера, вызывающий планировщик.
@@ -283,10 +259,20 @@ void createSchedulerContext()
 */
 void timer_interrupt(int j, siginfo_t *si, void *old_context)
 {
-    size_t dt = CLOCK_DELAY;
-    createSchedulerContext();
-    contextTimeInfo[currentContextIndex].totalWakingTime += dt;
-    contextTimeInfo[currentContextIndex].swapTimes++;
+    if(isAllArraySorted())
+    {
+        timer_off();
+        return;
+    }
+
+    getcontext(&signal_context);
+    signal_context.uc_stack.ss_sp = signal_stack;
+    signal_context.uc_stack.ss_size = STACK_SIZE;
+    signal_context.uc_stack.ss_flags = 0;
+    sigemptyset(&signal_context.uc_sigmask);
+    makecontext(&signal_context, scheduler, 1);
+
+    contextTimeInfo[currentContextIndex].totalWakingTime+=CLOCK_DELAY;
     swapcontext(&myContexts[currentContextIndex],&signal_context);
 }
 
@@ -417,19 +403,17 @@ int main(int argc, char *argv[])
     for(int i = 0; i < nContexts; i++)
         createCoroutine(i, argv[i+1]);
 
-    //устанавливаем таймер
+    ///устанавливаем таймер
     setup_signals();
-
-    //запускаем сортировку
-    //swapcontext(&uctx_main, &myContexts[0]);
-
-    createSchedulerContext();
-    printf("Swap context from main:\n");
-    // переходим в планировщик
-    swapcontext(&uctx_main, &signal_context);
+    timer_on();
+    currentClock = clock();
     
+    //запускаем сортировку
+    swapcontext(&uctx_main, &myContexts[0]);
+
     //ждем, пока все закончат сортировать
-    while(!isSchedulerStoped){;;}
+    while(!isAllArraySorted()){;;}
+    timer_off();
     
 
     //выводим инфу о том, сколько работали корутины
