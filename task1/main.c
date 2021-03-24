@@ -23,6 +23,11 @@
 #define say_error_and_return(msg) \
     do{printf("%s\n", msg); return;} while(0)
 
+#if DEBUG
+    #define DEBUG_OUTPUT(code) code
+#else
+    #define DEBUG_OUTPUT(code)
+#endif
 
 //==================================================================================================
 
@@ -78,9 +83,10 @@ static bool isAllArraySorted()
 */
 static void doSorting(int id, const char* filename)
 {
+    CLOCK_DELAY;
     sortedArrays[id] = sortArrayFromFile(filename);
-    contextTimeInfo[id].totalWakingTime += CLOCK_DELAY;
     sortedArrays[id].isSorted = 1;
+    while(1){;;}
 }
 
 /**
@@ -183,6 +189,28 @@ static void cleanMemoryForCoroutine(int nCount)
 
 sigset_t set; 
 struct itimerval timer;
+///< Флаг, отвечающий за то, остановлен ли планировщик
+//   Данный флаг принимает true, только когда все массивы
+//   отсортированы и планировщик передает управление main()
+bool isSchedulerStoped = false; 
+
+static void timer_off()
+{
+    timer.it_interval.tv_sec = 0;
+    timer.it_interval.tv_usec = 0;
+    timer.it_value = timer.it_interval;
+    if (setitimer(ITIMER_REAL, &timer, NULL) ) perror("setitiimer");
+}
+
+static void timer_on()
+{
+    timer.it_interval.tv_sec = 0;
+    timer.it_interval.tv_usec = TIME_LEGACY;
+    timer.it_value = timer.it_interval;
+    if (setitimer(ITIMER_REAL, &timer, NULL) ) perror("setitiimer");
+}
+
+
 
 /**
     \brief    Простейший планировщих корутин.
@@ -192,26 +220,61 @@ struct itimerval timer;
 */
 void scheduler()
 {
+    timer_off();
+    DEBUG_OUTPUT(printf("Let's chose another one\n"));
     int oldIndex = currentContextIndex;
     do
     {
         currentContextIndex++;
         currentContextIndex %= nContexts;
-    }while(sortedArrays[currentContextIndex].isSorted);
+        DEBUG_OUTPUT(printf("May be it's : %d\n", currentContextIndex));
+    }
+    while( sortedArrays[currentContextIndex].isSorted
+        && currentContextIndex != oldIndex
+    );
 
-    if(currentContextIndex!=oldIndex)
-        contextTimeInfo[oldIndex].swapTimes++;
+    DEBUG_OUTPUT(
+        for(int i = 0; i < nContexts; i++)
+            printf("isSorted[%d] = %d, Total time: %zd us\n",
+                i, sortedArrays[i].isSorted,
+                contextTimeInfo[i].totalWakingTime
+        );
+    );
+
+
+    if(currentContextIndex!=oldIndex || !sortedArrays[currentContextIndex].isSorted)
+    {
+        DEBUG_OUTPUT(
+            printf("Set context as : %d\n", currentContextIndex);
+        );
+        //contextTimeInfo[oldIndex].swapTimes++;
+    }
+    else
+    {
+        isSchedulerStoped = true;
+        DEBUG_OUTPUT(printf("Want jmp to main!\n"));
+        setcontext(&uctx_main);
+    }
     
+    
+
+    timer_on();
+    CLOCK_DELAY;
     setcontext(&myContexts[currentContextIndex]);
 }
 
 
-static void timer_off()
+/**
+    \brief  Функция создает контекст для запуска планировщика
+*/
+void createSchedulerContext()
 {
-    timer.it_interval.tv_sec = 0;
-        timer.it_interval.tv_usec = 0;
-        timer.it_value = timer.it_interval;
-        if (setitimer(ITIMER_REAL, &timer, NULL) ) perror("setitiimer");
+    getcontext(&signal_context);
+    signal_context.uc_stack.ss_sp = signal_stack;
+    signal_context.uc_stack.ss_size = STACK_SIZE;
+    signal_context.uc_stack.ss_flags = 0;
+    sigemptyset(&signal_context.uc_sigmask);
+    makecontext(&signal_context, scheduler, 1);
 }
 
 /**
@@ -220,20 +283,10 @@ static void timer_off()
 */
 void timer_interrupt(int j, siginfo_t *si, void *old_context)
 {
-    if(isAllArraySorted())
-    {
-        timer_off();
-        return;
-    }
-
-    getcontext(&signal_context);
-    signal_context.uc_stack.ss_sp = signal_stack;
-    signal_context.uc_stack.ss_size = STACK_SIZE;
-    signal_context.uc_stack.ss_flags = 0;
-    sigemptyset(&signal_context.uc_sigmask);
-    makecontext(&signal_context, scheduler, 1);
-
-    contextTimeInfo[currentContextIndex].totalWakingTime+=CLOCK_DELAY;
+    size_t dt = CLOCK_DELAY;
+    createSchedulerContext();
+    contextTimeInfo[currentContextIndex].totalWakingTime += dt;
+    contextTimeInfo[currentContextIndex].swapTimes++;
     swapcontext(&myContexts[currentContextIndex],&signal_context);
 }
 
@@ -366,18 +419,17 @@ int main(int argc, char *argv[])
 
     //устанавливаем таймер
     setup_signals();
-    timer.it_interval.tv_sec = 0;
-    timer.it_interval.tv_usec = TIME_LEGACY;
-    timer.it_value = timer.it_interval;
-    currentClock = clock();
-    if (setitimer(ITIMER_REAL, &timer, NULL) ) perror("setitiimer");
-    
-    //запускаем сортировку
-    swapcontext(&uctx_main, &myContexts[0]);
 
+    //запускаем сортировку
+    //swapcontext(&uctx_main, &myContexts[0]);
+
+    createSchedulerContext();
+    printf("Swap context from main:\n");
+    // переходим в планировщик
+    swapcontext(&uctx_main, &signal_context);
+    
     //ждем, пока все закончат сортировать
-    while(!isAllArraySorted()){;;}
-    timer_off();
+    while(!isSchedulerStoped){;;}
     
 
     //выводим инфу о том, сколько работали корутины
