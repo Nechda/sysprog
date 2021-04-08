@@ -228,28 +228,23 @@ void generateCommandPack()
     pushCommand(); 
 }
 
-/**
-    \brief   Функция определяет был ли встречен конец файла
-             при чтении данных из stdin
-    \return  true, если был встречен EOF; false в противном случае
-*/
-bool getIsEndOfFile()
-{
-    return isEndOfFile;
-}
 
 /**
-    \brief   Функция генерит структуру Task по введенным данным 
-    \return  Указатель на стурктуру Task
+    \brief   Функция генерит структуру Task по введенным данным
+    \param   [in]  ptrToTask  указатель на Task* в который будет
+                              записываться результат парса команды.
+    \return  Возвращает true, если был встречен конец файла,
+             false в противном случае.
 */
-struct Task* parseLine()
+bool parseLine(struct Task** ptrToTask)
 {
+    Assert_addr(ptrToTask);
     generateCommandPack();
-    struct Task* result = calloc(1, sizeof(struct Task));
-    Assert_addr(result);
-    *result = localTask;
+    *ptrToTask = calloc(1, sizeof(struct Task));
+    Assert_addr(*ptrToTask);
+    **ptrToTask = localTask;
     memset(&localTask, 0x00, sizeof(struct Task));
-    return result;
+    return isEndOfFile;
 }
 
 

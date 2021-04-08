@@ -29,7 +29,7 @@ struct Task
     bool isBackGround;
 };
 
-struct Task* parseLine(); 
+bool parseLine(struct Task** ptrToTask); 
 bool getIsEndOfFile();
 void cleanUpTask(struct Task* task);
 
