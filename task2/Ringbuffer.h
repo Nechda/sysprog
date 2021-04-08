@@ -2,7 +2,7 @@
 #define RING_BUFFER_H
 
 #include "Types.h"
-#include "parser.h"
+#include "Parser.h"
 #include <sys/types.h>
 
 void ringBufferInit();
