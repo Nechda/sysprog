@@ -23,7 +23,7 @@ $(EXECUTABLE): $(OBJS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 test: build
-	python3 checker.py -e ./$(EXECUTABLE) --max=25
+	sh testing.sh
 
 clean:
 	rm -rf $(EXECUTABLE) $(OBJS)
