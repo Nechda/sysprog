@@ -11,27 +11,27 @@
 
 
 enum {
-	BLOCK_SIZE = 512,
-	MAX_FILE_SIZE = 1024 * 1024 * 1024,
+    BLOCK_SIZE = 512,
+    MAX_FILE_SIZE = 1024 * 1024 * 1024,
 };
 
-/** Global error code. Set from any function on any error. */
+/** Global error code. Set from any function on any error. **/
 static enum ufs_error_code ufs_error_code = UFS_ERR_NO_ERR;
 
 struct block
 {
-	char *memory;
-	int occupied;
-	struct block *next;
-	struct block *prev;
+    char *memory;
+    int occupied;
+    struct block *next;
+    struct block *prev;
 };
 
 
-/*
-    \biref  Функция добавляет новый блок к передаваемому
-    \param  [in]  last  Указатель на последний блок, к которому
-                        будет присоединен новый блок.
-    \return Указатель на новый блок.
+/**
+    \biref  Function is adding a new block.
+    \param  [in]  last  The pointer to ther last block
+                        to which the new block will be attached
+    \return Pointer to the new block
 */
 static struct block*
 push_back_new_block(struct block* last)
@@ -44,11 +44,12 @@ push_back_new_block(struct block* last)
     return result;
 }
 
-/*
-    \biref  Функция удаляет последний блок в списке.
-    \param  [in]  last  Указатель на последний блок, который удаляется.
-    \return Указатель на предыдущий блок в списке, если такого нет, то
-            возвращается NULL.
+/**
+    \biref  Function is deleting the last block.
+    \param  [in]  last  The pointer to ther last block
+                        to which will be deleted
+    \return Pointer to the previous block in list if it
+            exist otherwise will be returned NULL
 */
 static struct block*
 pop_back_block(struct block* last)
@@ -63,17 +64,17 @@ pop_back_block(struct block* last)
 
 struct file
 {
-	struct block *block_list;
-	struct block *last_block;
+    struct block *block_list;
+    struct block *last_block;
     size_t size;
     bool isGhost;
-	int refs;
-	const char *name;
-	struct file *next;
-	struct file *prev;
+    int refs;
+    const char *name;
+    struct file *next;
+    struct file *prev;
 };
 
-/** List of all files. */
+/** List of all files. **/
 static struct file *file_list = NULL;
 
 
@@ -89,11 +90,11 @@ void debug_print_files()
 
 
 
-/*
-    \brief  Функция выполняет поиск файла в файловой системе.
-    \param  [in]  filename  Имя файла, который требуется найти.
-    \return Если файл найден в системе, то возвращается указатель
-            на cтруктуру file. В противном случае возвращается NULL.
+/**
+    \brief  Function searches file in the filesystem.
+    \param  [in]  filename  Name of the searched file
+    \return If file is not find then will be returned NULL, otherwise
+            it will the pointer to the file struct.
 */
 static struct file*
 find_file(const char* filename)
@@ -112,11 +113,11 @@ find_file(const char* filename)
     return curr == file_list ? NULL : curr;
 }
 
-/*
-    \brief  Функция создает новый файл в файловой системе.
-    \param  [in]  filename  Имя нового файла.
-    \return Указатель на структуру file созданного файла.
-            В случае ошибки возвращается NULL.
+/**
+    \brief  Function creates a new file in the filesystem.
+    \param  [in]  filename  Name of a new file
+    \return Pointer to the new file struct. If an error occured
+            will be returned NULL.
 */
 struct file*
 create_file(const char* filename)
@@ -135,7 +136,7 @@ create_file(const char* filename)
 
     if(file_list)
     {
-        //теперь добавляем в общий набор файлов
+        /* adding to the common set of files */
         result->prev = NULL;
         result->next = file_list;
         file_list->prev = result;
@@ -161,24 +162,22 @@ union Rights
 
 struct filedesc
 {
-	struct file *file;
+    struct file *file;
     struct block* current_block;
     size_t pos_reading;
     size_t pos_writing;
     union Rights rights;
 };
 
-/**
- * An array of file descriptors. When a file descriptor is
- * created, its pointer drops here. When a file descriptor is
- * closed, its place in this array is set to NULL and can be
- * taken by next ufs_open() call.
- */
+/*
+    An array of file descriptors. When a file descriptor is
+    created, its pointer drops here. When a file descriptor is
+    closed, its place in this array is set to NULL and can be
+    taken by next ufs_open() call.
+*/
 static struct filedesc** file_descriptors = NULL;
 static int file_descriptor_count = 0;
 static int file_descriptor_capacity = 0;
-
-
 
 
 
@@ -194,18 +193,15 @@ void debug_print_descriptors()
     }
 }
 
-/*
-    \brief  Функция ищет свободное место в массиве дескрипторов.
-    \return Индекс в массиве дескрипторов, где имеется место для
-            записи. В случае отсутствия места в массиве 
-            возвращается -1.
+/**
+    \brief  Function finds a free space in the descriptors array.
+    \return An index in the descriptors array, otherwise will
+            be returned -1.
 */
 static int
 get_free_space_in_fd_array()
 {
-    if(!file_descriptors
-    ||  file_descriptor_count >= file_descriptor_capacity
-    )
+    if(!file_descriptors ||  file_descriptor_count >= file_descriptor_capacity)
         return -1;
 
     for(int i = 0; i < file_descriptor_capacity; i++)
@@ -217,9 +213,9 @@ get_free_space_in_fd_array()
 
 
 
-/*
-    \brief  Функция увеличивает размер массива дескрипторов на единицу
-    \return Указатель на новый массив дескрипторов.
+/**
+    \brief  Function increases a size of descriptors array by one.
+    \return The pointer to a new descriptors array.
 */
 static struct filedesc**
 resize_fd_array()
@@ -234,13 +230,13 @@ resize_fd_array()
 enum ufs_error_code
 ufs_errno()
 {
-	return ufs_error_code;
+    return ufs_error_code;
 }
 
 int
 ufs_open(const char *filename, int flags)
 {
-    //подсунули нулевой указатель
+    /* catches NULL in filename */
     if(!filename)
         return -1;
 
@@ -257,21 +253,21 @@ ufs_open(const char *filename, int flags)
     bool isExit = opened_file;
     bool isGhost = isExit ? opened_file->isGhost : false;
 
-    //не существует файла
+    /* file doesn`t exist */
     if(!isExit && !isNeedCreate)
     {
         ufs_error_code = UFS_ERR_NO_FILE;
         return -1;
     }
 
-    //пытаемся обратиться к несуществующему 'ghost' файлу
+    /* trying to access to the `ghost` file */
     if(isExit && isGhost && !isNeedCreate)
     {
         ufs_error_code = UFS_ERR_NO_FILE;
         return -1;
     }
 
-    //создаем файл
+    /* creating a file */
     if(!isExit && isNeedCreate)
         opened_file = create_file(filename);
 
@@ -294,7 +290,7 @@ ufs_open(const char *filename, int flags)
     file_descriptor_count++;
     opened_file->refs++;
 
-	return fd;
+    return fd;
 }
 
 
@@ -316,7 +312,7 @@ ufs_write(int fd, const char *buf, size_t size)
         RETURN_ERROR(UFS_ERR_NO_FILE);
 
     struct block* blk = f->block_list;
-    //создание блока, если у файла нет ни одного
+    /* creating block if we don't have any */
     if(!blk)
     {
         f->block_list = calloc(1, sizeof(struct block));
@@ -335,11 +331,14 @@ ufs_write(int fd, const char *buf, size_t size)
         s_fd->current_block = NULL;
     }
 
-    // если доступно чтение и запись, то не используем `current_block`
+    /*
+        if writing and reading is available together,
+        then don`t use `current_block`
+    */
     if(!(s_fd->rights.isWritable ^ s_fd->rights.isReadable))
         s_fd->current_block = NULL;
 
-    //переходим на блок, на который указывает позиция
+    /* jumping to the block that pointer are seated */
     if(s_fd->rights.isAppend)
     {
         s_fd->pos_writing = s_fd->file->size;
@@ -385,7 +384,7 @@ ufs_write(int fd, const char *buf, size_t size)
 
     int pos_in_blk = s_fd->pos_writing % BLOCK_SIZE;
     int original_size = size;
-    //теперь в blk лежит тот блок, в который нужно писать
+    /* now blk is the block that we will write to */
     while(size)
     {
         if(pos_in_blk == BLOCK_SIZE)
@@ -438,13 +437,16 @@ ufs_read(int fd, char *buf, size_t size)
         RETURN_ERROR(UFS_ERR_NO_FILE);
 
     struct block* blk = f->block_list;
-    // если файл пуст, то считать можно только 0 байт
+    /* if file is empty, then we can read just 0 bytes */
     if(!blk)
         return 0;
 
     struct filedesc* s_fd = file_descriptors[fd];
 
-    // если доступно чтение и запись, то не используем `current_block`
+    /*
+        if writing and reading is available together,
+        then don`t use `current_block`
+    */
     if(!(s_fd->rights.isWritable ^ s_fd->rights.isReadable))
         s_fd->current_block = NULL;
 
@@ -454,7 +456,7 @@ ufs_read(int fd, char *buf, size_t size)
         s_fd->current_block = NULL;
     }
 
-    //переходим на блок, на который указывает позиция
+    /* jumping to the block that pointer are seated */
     if(s_fd->current_block)
         blk = s_fd->current_block;
     else
@@ -469,7 +471,7 @@ ufs_read(int fd, char *buf, size_t size)
 
     bool isEOF = !blk;
     int original_size = size;
-    //теперь в blk лежит тот блок, из которого требуется читать информацию
+    /* now blk is the block that we will read from */
     while(size && !isEOF)
     {
         isEOF = pos_in_blk == blk->occupied && !blk->next;
@@ -493,11 +495,10 @@ ufs_read(int fd, char *buf, size_t size)
 }
 
 
-/*
-    \brief  Функция выполняет чистку структуры file.
-    \param  [in]  f  Указатель на структуру файла.
-    \note   После выполнения функции передаваемый указатель
-            НЕ нужно очищать.
+/**
+    \brief  Function cleans up file structure.
+    \param  [in]  f  Pointer to the file structure
+    \note   After cleaning you don't have to call free(...) function.
 */
 static void
 file_clean_up(struct file* f)
@@ -515,10 +516,9 @@ file_clean_up(struct file* f)
     free(f);
 }
 
-/*
-    \brief  Функция удаляет файл из списка файлов.
-    \param  [in]  f  Указатель на фалй, который
-                     требуется удалить из списка.
+/**
+    \brief  Function deletes a file from the list of files.
+    \param  [in]  f  Pointer to the file that you want to delete
 */
 static void
 remove_file_from_list(struct file* f)
@@ -539,7 +539,7 @@ remove_file_from_list(struct file* f)
 int
 ufs_close(int fd)
 {
-	if(fd >= file_descriptor_capacity || fd < 0)
+    if(fd >= file_descriptor_capacity || fd < 0)
         RETURN_ERROR(UFS_ERR_NO_FILE);
     
     if(!file_descriptors[fd])
@@ -547,8 +547,10 @@ ufs_close(int fd)
 
 
     file_descriptors[fd]->file->refs--;
-    // чистим массив дескрипторов, если файл уже удален и
-    // и была последняя ссылка
+    /*
+        If file have already deleted and it was the last reference
+        then cleaning descriptors array.
+    */
     {
         struct file* f = file_descriptors[fd]->file;
         if(f->isGhost && !f->refs)
@@ -569,7 +571,7 @@ ufs_close(int fd)
         file_descriptor_count = 0;
         file_descriptors = NULL;
     }
-	return 0;
+    return 0;
 }
 
 
@@ -578,7 +580,7 @@ int
 ufs_delete(const char *filename)
 {
     struct file* f = find_file(filename);
-    //такого файла не существует
+    /* this file doesn't exist */
     if(!f)
     RETURN_ERROR(UFS_ERR_NO_FILE);
     if(f->isGhost)
