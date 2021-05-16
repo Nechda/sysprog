@@ -9,6 +9,17 @@
 
 #define RETURN_ERROR(error_code) do{ ufs_error_code = error_code; return -1; } while(0)
 
+static void*
+safe_calloc(size_t __nmemb, size_t __size)
+{
+    void* result = calloc(__nmemb, __size);
+    if(!result)
+    {
+        perror("Allocated memory contains NULL.");
+        exit(EXIT_FAILURE);
+    }
+    return result;
+}
 
 enum {
     BLOCK_SIZE = 512,
@@ -36,8 +47,8 @@ struct block
 static struct block*
 push_back_new_block(struct block* last)
 {
-    struct block* result = calloc(1,sizeof(struct block));
-    result->memory = calloc(BLOCK_SIZE, sizeof(char));
+    struct block* result = safe_calloc(1,sizeof(struct block));
+    result->memory = safe_calloc(BLOCK_SIZE, sizeof(char));
 
     last->next = result;
     result->prev = last;
@@ -67,7 +78,7 @@ struct file
     struct block *block_list;
     struct block *last_block;
     size_t size;
-    bool isGhost;
+    bool is_ghost;
     int refs;
     const char *name;
     struct file *next;
@@ -78,12 +89,13 @@ struct file
 static struct file *file_list = NULL;
 
 
-void debug_print_files()
+void
+debug_print_files()
 {
     struct file* curr = file_list;
     while(curr)
     {
-        printf("File{\n  name:%s\n  isGhost: %d\n}\n", curr->name,curr->isGhost);
+        printf("File{\n  name:%s\n  is_ghost: %d\n}\n", curr->name,curr->is_ghost);
         curr=curr->next;
     }
 }
@@ -128,9 +140,9 @@ create_file(const char* filename)
         return NULL;
     }
 
-    struct file* result = calloc(1, sizeof(struct file));
+    struct file* result = safe_calloc(1, sizeof(struct file));
     int filename_len = strlen(filename) + 1;
-    result->name = calloc(filename_len, sizeof(char));
+    result->name = safe_calloc(filename_len, sizeof(char));
     memcpy((void*)result->name, filename, filename_len);
 
 
@@ -152,10 +164,10 @@ union Rights
     int8_t bits;
     struct
     {
-        int8_t isCreated  : 1;
-        int8_t isReadable : 1;
-        int8_t isWritable : 1;
-        int8_t isAppend   : 1;
+        int8_t is_created  : 1;
+        int8_t is_readable : 1;
+        int8_t is_writable : 1;
+        int8_t is_append   : 1;
         int8_t reserved   : 4;
     };
 };
@@ -181,7 +193,8 @@ static int file_descriptor_capacity = 0;
 
 
 
-void debug_print_descriptors()
+void
+debug_print_descriptors()
 {
     for(int i = 0; i < file_descriptor_capacity; i++)
     {
@@ -245,34 +258,34 @@ ufs_open(const char *filename, int flags)
 
     union Rights rights;
     rights.bits = flags;
-    if(!rights.isReadable && !rights.isWritable)
+    if(!rights.is_readable && !rights.is_writable)
         rights.bits |= UFS_READ_WRITE | USF_APPEND;
 
-    bool isNeedCreate = rights.isCreated;
+    bool is_need_create = rights.is_created;
 
-    bool isExit = opened_file;
-    bool isGhost = isExit ? opened_file->isGhost : false;
+    bool is_exit = opened_file;
+    bool is_ghost = is_exit ? opened_file->is_ghost : false;
 
     /* file doesn`t exist */
-    if(!isExit && !isNeedCreate)
+    if(!is_exit && !is_need_create)
     {
         ufs_error_code = UFS_ERR_NO_FILE;
         return -1;
     }
 
     /* trying to access to the `ghost` file */
-    if(isExit && isGhost && !isNeedCreate)
+    if(is_exit && is_ghost && !is_need_create)
     {
         ufs_error_code = UFS_ERR_NO_FILE;
         return -1;
     }
 
     /* creating a file */
-    if(!isExit && isNeedCreate)
+    if(!is_exit && is_need_create)
         opened_file = create_file(filename);
 
 
-    if(isExit && isGhost && isNeedCreate)
+    if(is_exit && is_ghost && is_need_create)
         opened_file = create_file(filename);
 
 
@@ -283,7 +296,7 @@ ufs_open(const char *filename, int flags)
         resize_fd_array();
     }
 
-    file_descriptors[fd] = calloc(1,sizeof(struct file));
+    file_descriptors[fd] = safe_calloc(1,sizeof(struct file));
 
     file_descriptors[fd]->file = opened_file;
     file_descriptors[fd]->rights = rights;
@@ -304,7 +317,7 @@ ufs_write(int fd, const char *buf, size_t size)
     if(!buf)
         RETURN_ERROR(UFS_ERR_NULL_PTR_BUF);
 
-    if(!file_descriptors[fd]->rights.isWritable)
+    if(!file_descriptors[fd]->rights.is_writable)
         RETURN_ERROR(UFS_ERR_NO_PERMISSION);
 
     struct file* f = file_descriptors[fd]->file;
@@ -315,11 +328,11 @@ ufs_write(int fd, const char *buf, size_t size)
     /* creating block if we don't have any */
     if(!blk)
     {
-        f->block_list = calloc(1, sizeof(struct block));
+        f->block_list = safe_calloc(1, sizeof(struct block));
         blk = f->block_list;
         f->last_block = blk;
 
-        blk->memory = calloc(BLOCK_SIZE, sizeof(char));
+        blk->memory = safe_calloc(BLOCK_SIZE, sizeof(char));
         blk->occupied = 0;
     }
 
@@ -335,11 +348,11 @@ ufs_write(int fd, const char *buf, size_t size)
         if writing and reading is available together,
         then don`t use `current_block`
     */
-    if(!(s_fd->rights.isWritable ^ s_fd->rights.isReadable))
+    if(!(s_fd->rights.is_writable ^ s_fd->rights.is_readable))
         s_fd->current_block = NULL;
 
     /* jumping to the block that pointer are seated */
-    if(s_fd->rights.isAppend)
+    if(s_fd->rights.is_append)
     {
         s_fd->pos_writing = s_fd->file->size;
         if(s_fd->pos_writing >= MAX_FILE_SIZE)
@@ -429,7 +442,7 @@ ufs_read(int fd, char *buf, size_t size)
     if(!buf)
         RETURN_ERROR(UFS_ERR_NULL_PTR_BUF);
 
-    if(!file_descriptors[fd]->rights.isReadable)
+    if(!file_descriptors[fd]->rights.is_readable)
         RETURN_ERROR(UFS_ERR_NO_PERMISSION);
 
     struct file* f = file_descriptors[fd]->file;
@@ -447,7 +460,7 @@ ufs_read(int fd, char *buf, size_t size)
         if writing and reading is available together,
         then don`t use `current_block`
     */
-    if(!(s_fd->rights.isWritable ^ s_fd->rights.isReadable))
+    if(!(s_fd->rights.is_writable ^ s_fd->rights.is_readable))
         s_fd->current_block = NULL;
 
     if(s_fd->pos_reading > f->size)
@@ -469,13 +482,13 @@ ufs_read(int fd, char *buf, size_t size)
 
     int pos_in_blk = s_fd->pos_reading % BLOCK_SIZE;
 
-    bool isEOF = !blk;
+    bool is_EOF = !blk;
     int original_size = size;
     /* now blk is the block that we will read from */
-    while(size && !isEOF)
+    while(size && !is_EOF)
     {
-        isEOF = pos_in_blk == blk->occupied && !blk->next;
-        if(isEOF) break;
+        is_EOF = pos_in_blk == blk->occupied && !blk->next;
+        if(is_EOF) break;
         if(pos_in_blk == BLOCK_SIZE)
         {
             blk = blk->next;
@@ -553,7 +566,7 @@ ufs_close(int fd)
     */
     {
         struct file* f = file_descriptors[fd]->file;
-        if(f->isGhost && !f->refs)
+        if(f->is_ghost && !f->refs)
             remove_file_from_list(f);
     }
     free(file_descriptors[fd]);
@@ -583,9 +596,9 @@ ufs_delete(const char *filename)
     /* this file doesn't exist */
     if(!f)
     RETURN_ERROR(UFS_ERR_NO_FILE);
-    if(f->isGhost)
+    if(f->is_ghost)
         return 0;
-    f->isGhost = f->refs;
+    f->is_ghost = f->refs;
     if(f->refs == 0)
         remove_file_from_list(f);
     return 0;
